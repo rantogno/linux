@@ -1240,6 +1240,40 @@ static void notify_ring(struct intel_engine_cs *engine)
 	trace_intel_engine_notify(engine, wait);
 }
 
+#define SIM_IRQ_TIMER_INTERVAL 30
+
+static void sim_irq_timer_fn(struct timer_list *t)
+{
+	struct drm_i915_private *dev_priv = from_timer(dev_priv, t,
+						       sim_irq_timer);
+	struct drm_device *dev = &dev_priv->drm;
+	int pipe;
+
+	notify_ring(dev_priv->engine[RCS]);
+	notify_ring(dev_priv->engine[BCS]);
+
+	for_each_pipe(dev_priv, pipe)
+		drm_handle_vblank(dev, pipe);
+
+	mod_timer(&dev_priv->sim_irq_timer, jiffies + msecs_to_jiffies(SIM_IRQ_TIMER_INTERVAL));
+}
+
+static void sim_irq_timer_start(struct drm_device *dev)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+
+	timer_setup(&dev_priv->sim_irq_timer, sim_irq_timer_fn, 0);
+	mod_timer(&dev_priv->sim_irq_timer, jiffies + msecs_to_jiffies(SIM_IRQ_TIMER_INTERVAL));
+}
+
+static void sim_irq_timer_stop(struct drm_device *dev)
+{
+	struct drm_i915_private *dev_priv = dev->dev_private;
+
+	if (dev_priv->sim_irq_timer.function)
+		del_timer_sync(&dev_priv->sim_irq_timer);
+}
+
 static void vlv_c0_read(struct drm_i915_private *dev_priv,
 			struct intel_rps_ei *ei)
 {
@@ -3580,6 +3614,9 @@ static void gen8_irq_reset(struct drm_device *dev)
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	int pipe;
 
+	if (dev_priv->is_simulator)
+		sim_irq_timer_stop(dev);
+
 	I915_WRITE(GEN8_MASTER_IRQ, 0);
 	POSTING_READ(GEN8_MASTER_IRQ);
 
@@ -4220,6 +4257,9 @@ static int gen8_irq_postinstall(struct drm_device *dev)
 
 	I915_WRITE(GEN8_MASTER_IRQ, GEN8_MASTER_IRQ_CONTROL);
 	POSTING_READ(GEN8_MASTER_IRQ);
+
+	if (dev_priv->is_simulator)
+		sim_irq_timer_start(dev);
 
 	return 0;
 }
