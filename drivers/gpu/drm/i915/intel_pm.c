@@ -8152,6 +8152,9 @@ static inline void intel_enable_llc_pstate(struct drm_i915_private *i915)
 	if (i915->gt_pm.llc_pstate.enabled)
 		return;
 
+	if (i915->is_simulator)
+		return;
+
 	gen6_update_ring_freq(i915);
 
 	i915->gt_pm.llc_pstate.enabled = true;
