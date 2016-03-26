@@ -32,6 +32,8 @@
 #include <linux/fb.h>
 #include <linux/hdmi.h>
 #include <linux/media-bus-format.h>
+#include <linux/srcu.h>
+#include <linux/fence.h>
 #include <uapi/drm/drm_mode.h>
 #include <uapi/drm/drm_fourcc.h>
 #include <drm/drm_modeset_lock.h>
@@ -575,6 +577,9 @@ struct drm_crtc_funcs {
  * @gamma_store: gamma ramp values
  * @helper_private: mid-layer private data
  * @properties: property tracking for this CRTC
+ * @fence_context: context for fence signalling
+ * @fence_lock: fence lock for the fence context
+ * @fence_seqno: seqno variable to create fences
  *
  * Each CRTC may have one or more connectors associated with it.  This structure
  * allows the CRTC to be controlled.
@@ -683,7 +688,21 @@ struct drm_crtc {
 	 */
 	struct drm_crtc_crc crc;
 #endif
+
+	/* fence timelines info for DRM out-fences */
+	unsigned int fence_context;
+	spinlock_t fence_lock;
+	unsigned long fence_seqno;
+	char timeline_name[32];
 };
+
+extern const struct fence_ops drm_crtc_fence_ops;
+
+static inline struct drm_crtc *fence_to_crtc(struct fence *fence)
+{
+	BUG_ON(fence->ops != &drm_crtc_fence_ops);
+	return container_of(fence->lock, struct drm_crtc, fence_lock);
+}
 
 /**
  * struct drm_mode_set - new values for a CRTC config change
