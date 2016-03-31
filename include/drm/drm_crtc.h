@@ -705,6 +705,16 @@ static inline struct drm_crtc *fence_to_crtc(struct fence *fence)
 }
 
 /**
+ * struct drm_out_fence_state - store out_fence data for clean up
+ * @sync_file: sync_file related to the out_fence
+ * @fd: file descriptor to installed on the sync_file.
+ */
+struct drm_out_fence_state {
+	struct sync_file *sync_file;
+	int fd;
+};
+
+/*
  * struct drm_mode_set - new values for a CRTC config change
  * @fb: framebuffer to use for new config
  * @crtc: CRTC whose configuration we're about to change
