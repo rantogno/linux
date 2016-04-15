@@ -252,6 +252,15 @@ intel_virt_detect_pch(const struct drm_i915_private *dev_priv)
 	return id;
 }
 
+void intel_init_simulator(struct drm_i915_private *dev_priv)
+{
+	if (i915_modparams.is_simulator) {
+		DRM_DEBUG_KMS("Forcing Simulator mode\n");
+		dev_priv->is_simulator = true;
+		dev_priv->pch_type = intel_virt_detect_pch(dev_priv);
+	}
+}
+
 static void intel_detect_pch(struct drm_i915_private *dev_priv)
 {
 	struct pci_dev *pch = NULL;
