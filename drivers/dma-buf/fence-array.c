@@ -75,8 +75,25 @@ static bool fence_array_enable_signaling(struct fence *fence)
 static bool fence_array_signaled(struct fence *fence)
 {
 	struct fence_array *array = to_fence_array(fence);
+	int i, num_pending;
 
-	return atomic_read(&array->num_pending) <= 0;
+	num_pending = atomic_read(&array->num_pending);
+
+	/*
+	 * Before signaling is enabled, num_pending is static (set during array
+	 * construction as a count of all fences or set to 1 if signal_on_any
+	 * flag is passed. To ensure forward progress, i.e. a while
+	 * (!fence_is_signaled()) ; busy-loop eventually proceeds, we need to
+	 * check the current status of our fences.
+	 */
+	if (!test_bit(FENCE_FLAG_ENABLE_SIGNAL_BIT, &fence->flags)) {
+		for (i = 0 ; i < array->num_fences; ++i) {
+			if (fence_is_signaled(array->fences[i]))
+				num_pending--;
+		}
+	}
+
+	return num_pending <= 0;
 }
 
 static void fence_array_release(struct fence *fence)
