@@ -120,6 +120,23 @@ static u64 i915_gem_obj_total_ggtt_size(struct drm_i915_gem_object *obj)
 	return size;
 }
 
+static struct intel_engine_cs *
+last_write_engine(struct drm_i915_gem_object *obj)
+{
+	struct intel_engine_cs *engine = NULL;
+	struct fence *fence;
+
+	rcu_read_lock();
+	fence = reservation_object_get_excl_rcu(obj->resv);
+	rcu_read_unlock();
+
+	if (fence && fence_is_i915(fence) && !fence_is_signaled(fence))
+		engine = to_request(fence)->engine;
+	fence_put(fence);
+
+	return engine;
+}
+
 static void
 describe_obj(struct seq_file *m, struct drm_i915_gem_object *obj)
 {
@@ -128,11 +145,10 @@ describe_obj(struct seq_file *m, struct drm_i915_gem_object *obj)
 	struct i915_vma *vma;
 	unsigned int frontbuffer_bits;
 	int pin_count = 0;
-	enum intel_engine_id id;
 
 	lockdep_assert_held(&obj->base.dev->struct_mutex);
 
-	seq_printf(m, "%pK: %c%c%c%c%c %8zdKiB %02x %02x [ ",
+	seq_printf(m, "%pK: %c%c%c%c%c %8zdKiB %02x %02x %s%s%s",
 		   &obj->base,
 		   get_active_flag(obj),
 		   get_pin_flag(obj),
@@ -141,14 +157,7 @@ describe_obj(struct seq_file *m, struct drm_i915_gem_object *obj)
 		   get_pin_mapped_flag(obj),
 		   obj->base.size / 1024,
 		   obj->base.read_domains,
-		   obj->base.write_domain);
-	for_each_engine_id(engine, dev_priv, id)
-		seq_printf(m, "%x ",
-			   i915_gem_active_get_seqno(&obj->last_read[id],
-						     &obj->base.dev->struct_mutex));
-	seq_printf(m, "] %x %s%s%s",
-		   i915_gem_active_get_seqno(&obj->last_write,
-					     &obj->base.dev->struct_mutex),
+		   obj->base.write_domain,
 		   i915_cache_level_str(dev_priv, obj->cache_level),
 		   obj->mm.dirty ? " dirty" : "",
 		   obj->mm.madv == I915_MADV_DONTNEED ? " purgeable" : "");
@@ -188,8 +197,7 @@ describe_obj(struct seq_file *m, struct drm_i915_gem_object *obj)
 		seq_printf(m, " (%s mappable)", s);
 	}
 
-	engine = i915_gem_active_get_engine(&obj->last_write,
-					    &dev_priv->drm.struct_mutex);
+	engine = last_write_engine(obj);
 	if (engine)
 		seq_printf(m, " (%s)", engine->name);
 
