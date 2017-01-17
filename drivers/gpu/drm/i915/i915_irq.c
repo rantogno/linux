@@ -3574,6 +3574,9 @@ static void ironlake_irq_reset(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = to_i915(dev);
 
+	if (to_i915(dev)->is_simulator)
+		sim_irq_timer_stop(dev);
+
 	if (IS_GEN5(dev_priv))
 		I915_WRITE(HWSTAM, 0xffffffff);
 
@@ -4349,6 +4352,9 @@ static int cherryview_irq_postinstall(struct drm_device *dev)
 	I915_WRITE(GEN8_MASTER_IRQ, GEN8_MASTER_IRQ_CONTROL);
 	POSTING_READ(GEN8_MASTER_IRQ);
 
+	if (dev_priv->is_simulator)
+		sim_irq_timer_start(dev);
+
 	return 0;
 }
 
@@ -4389,6 +4395,9 @@ static int i8xx_irq_postinstall(struct drm_device *dev)
 	i915_enable_pipestat(dev_priv, PIPE_A, PIPE_CRC_DONE_INTERRUPT_STATUS);
 	i915_enable_pipestat(dev_priv, PIPE_B, PIPE_CRC_DONE_INTERRUPT_STATUS);
 	spin_unlock_irq(&dev_priv->irq_lock);
+
+	if (dev_priv->is_simulator)
+		sim_irq_timer_start(dev);
 
 	return 0;
 }
