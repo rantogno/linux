@@ -158,6 +158,27 @@ static u16 compute_eu_total(const struct sseu_dev_info *sseu)
 	return total;
 }
 
+static void gen11_sseu_info_init(struct drm_i915_private *dev_priv)
+{
+	struct sseu_dev_info *sseu = &mkwrite_device_info(dev_priv)->sseu;
+	int eu_max = 8;
+	u32 eu_disable;
+
+	sseu->slice_mask = I915_READ(GEN11_GT_SLICE_ENABLE) &
+				GEN11_GT_S_ENA_MASK;
+	sseu->subslice_mask[0] = ~(I915_READ(GEN11_GT_SUBSLICE_DISABLE) &
+				GEN11_GT_SS_DIS_MASK);
+	eu_disable = I915_READ(GEN11_EU_DISABLE) & GEN11_GT_S_ENA_MASK;
+
+	sseu->eu_per_subslice = eu_max - hweight32(eu_disable);
+	sseu->eu_total = sseu->eu_per_subslice * hweight32(sseu->subslice_mask[0]);
+
+	/* ICL has no power gating restrictions. */
+	sseu->has_slice_pg = 1;
+	sseu->has_subslice_pg = 1;
+	sseu->has_eu_pg = 1;
+}
+
 static void gen10_sseu_info_init(struct drm_i915_private *dev_priv)
 {
 	struct sseu_dev_info *sseu = &mkwrite_device_info(dev_priv)->sseu;
@@ -768,8 +789,10 @@ void intel_device_info_runtime_init(struct intel_device_info *info)
 		broadwell_sseu_info_init(dev_priv);
 	else if (INTEL_GEN(dev_priv) == 9)
 		gen9_sseu_info_init(dev_priv);
-	else if (INTEL_GEN(dev_priv) >= 10)
+	else if (INTEL_GEN(dev_priv) == 10)
 		gen10_sseu_info_init(dev_priv);
+	else if (INTEL_INFO(dev_priv)->gen >= 11)
+		gen11_sseu_info_init(dev_priv);
 
 	/* Initialize command stream timestamp frequency */
 	info->cs_timestamp_frequency_khz = read_timestamp_frequency(dev_priv);
