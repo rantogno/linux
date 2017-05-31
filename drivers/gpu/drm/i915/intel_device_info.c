@@ -167,17 +167,28 @@ static void gen11_sseu_info_init(struct drm_i915_private *dev_priv)
 
 	sseu->slice_mask = I915_READ(GEN11_GT_SLICE_ENABLE) &
 				GEN11_GT_S_ENA_MASK;
-	sseu->subslice_mask[0] = ~(I915_READ(GEN11_GT_SUBSLICE_DISABLE) &
-				GEN11_GT_SS_DIS_MASK);
+
+	if (IS_GEN11(dev_priv))
+		sseu->subslice_mask[0] = ~(I915_READ(GEN11_GT_SUBSLICE_DISABLE) &
+					GEN11_GT_SS_DIS_MASK);
+	else
+		sseu->subslice_mask[0] = I915_READ(GEN12_GT_DSS_ENABLE) &
+				      GEN12_GT_DSS0_EN_MASK;
+
 	eu_disable = I915_READ(GEN11_EU_DISABLE) & GEN11_GT_S_ENA_MASK;
 
 	sseu->eu_per_subslice = eu_max - hweight32(eu_disable);
 	sseu->eu_total = sseu->eu_per_subslice * hweight32(sseu->subslice_mask[0]);
 
-	/* ICL has no power gating restrictions. */
+	/*
+	 * ICL has no power gating restrictions. TGL only supports slice-level
+	 * power gating
+	 */
 	sseu->has_slice_pg = 1;
-	sseu->has_subslice_pg = 1;
-	sseu->has_eu_pg = 1;
+	if (IS_GEN11(dev_priv)) {
+		sseu->has_subslice_pg = 1;
+		sseu->has_eu_pg = 1;
+	}
 }
 
 static void gen10_sseu_info_init(struct drm_i915_private *dev_priv)
