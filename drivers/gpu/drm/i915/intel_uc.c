@@ -235,6 +235,7 @@ static int guc_enable_communication(struct intel_guc *guc)
 		return intel_guc_enable_ct(guc);
 
 	guc->send = intel_guc_send_mmio;
+	guc->recv = intel_guc_receive_mmio;
 	return 0;
 }
 
@@ -248,6 +249,7 @@ static void guc_disable_communication(struct intel_guc *guc)
 	gen9_disable_guc_interrupts(dev_priv);
 
 	guc->send = intel_guc_send_nop;
+	guc->recv = intel_guc_receive_nop;
 }
 
 int intel_uc_init_misc(struct drm_i915_private *dev_priv)

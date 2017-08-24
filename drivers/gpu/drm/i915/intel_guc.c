@@ -85,6 +85,7 @@ void intel_guc_init_early(struct intel_guc *guc)
 	mutex_init(&guc->send_mutex);
 	spin_lock_init(&guc->irq_lock);
 	guc->send = intel_guc_send_nop;
+	guc->recv = intel_guc_receive_nop;
 	if (INTEL_GEN(dev_priv) >= 11)
 		guc->notify = gen11_guc_raise_irq;
 	else
@@ -352,6 +353,11 @@ int intel_guc_send_nop(struct intel_guc *guc, const u32 *action, u32 len,
 	return -ENODEV;
 }
 
+void intel_guc_receive_nop(struct intel_guc *guc)
+{
+	WARN(1, "Unexpected receive\n");
+}
+
 /*
  * This function implements the MMIO based host to GuC interface.
  */
@@ -420,7 +426,10 @@ int intel_guc_send_mmio(struct intel_guc *guc, const u32 *action, u32 len,
 	return ret;
 }
 
-void intel_guc_to_host_event_handler(struct intel_guc *guc)
+/*
+ * This function implements the MMIO based GuC to host interface.
+ */
+void intel_guc_receive_mmio(struct intel_guc *guc)
 {
 	struct drm_i915_private *dev_priv = guc_to_i915(guc);
 	u32 msg, val;
@@ -445,6 +454,11 @@ void intel_guc_to_host_event_handler(struct intel_guc *guc)
 	if (msg & (INTEL_GUC_RECV_MSG_FLUSH_LOG_BUFFER |
 		   INTEL_GUC_RECV_MSG_CRASH_DUMP_POSTED))
 		intel_guc_log_flush(guc);
+}
+
+void intel_guc_to_host_event_handler(struct intel_guc *guc)
+{
+	guc->recv(guc);
 }
 
 int intel_guc_sample_forcewake(struct intel_guc *guc)
