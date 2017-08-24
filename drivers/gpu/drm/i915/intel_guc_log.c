@@ -453,6 +453,12 @@ static void guc_log_capture_logs(struct intel_guc_log *log)
 	intel_runtime_pm_put(dev_priv);
 }
 
+void intel_guc_log_flush(struct intel_guc *guc)
+{
+	/* Handle flush interrupt in bottom half */
+	queue_work(guc->log.relay.flush_wq, &guc->log.relay.flush_work);
+}
+
 int intel_guc_log_create(struct intel_guc_log *log)
 {
 	struct intel_guc *guc = log_to_guc(log);

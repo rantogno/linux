@@ -77,6 +77,7 @@ struct intel_guc_log {
 void intel_guc_log_init_early(struct intel_guc_log *log);
 int intel_guc_log_create(struct intel_guc_log *log);
 void intel_guc_log_destroy(struct intel_guc_log *log);
+void intel_guc_log_flush(struct intel_guc *guc);
 
 int intel_guc_log_level_get(struct intel_guc_log *log);
 int intel_guc_log_level_set(struct intel_guc_log *log, u64 control_val);
