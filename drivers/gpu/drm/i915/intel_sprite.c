@@ -211,7 +211,8 @@ void intel_pipe_update_end(struct intel_crtc_state *new_crtc_state)
 		return;
 
 	if (crtc->debug.start_vbl_count &&
-	    crtc->debug.start_vbl_count != end_vbl_count) {
+	    crtc->debug.start_vbl_count != end_vbl_count &&
+	    !(INTEL_GEN(dev_priv) >= 11 && dev_priv->is_simulator)) {
 		DRM_ERROR("Atomic update failure on pipe %c (start=%u end=%u) time %lld us, min %d, max %d, scanline start %d, end %d\n",
 			  pipe_name(pipe), crtc->debug.start_vbl_count,
 			  end_vbl_count,
