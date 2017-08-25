@@ -565,6 +565,7 @@ struct intel_engine_cs {
 
 #define I915_ENGINE_NEEDS_CMD_PARSER BIT(0)
 #define I915_ENGINE_SUPPORTS_STATS   BIT(1)
+#define I915_ENGINE_HAS_RCS_REG_STATE	BIT(2)
 	unsigned int flags;
 
 	/*
