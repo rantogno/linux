@@ -59,7 +59,7 @@
 #define GEM_TRACE_DUMP() do { } while (0)
 #endif
 
-#define I915_NUM_ENGINES 8
+#define I915_NUM_ENGINES 9
 
 #define I915_USER_RINGS (4)
 #define I915_EXEC_INTERNAL_ENGINE (I915_USER_RINGS + 1) /*no submits allowed*/
