@@ -61,4 +61,7 @@
 
 #define I915_NUM_ENGINES 8
 
+#define I915_USER_RINGS (4)
+#define I915_EXEC_INTERNAL_ENGINE (I915_USER_RINGS + 1) /*no submits allowed*/
+
 #endif /* __I915_GEM_H__ */
