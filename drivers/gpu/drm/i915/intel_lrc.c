@@ -1811,6 +1811,7 @@ static struct gen11_irq_bank_bit gen11_gtiir[] = {
 	[_VCS(3)] = {1, GEN11_VCS(3)},
 	[_VECS(0)] = {1, GEN11_VECS(0)},
 	[_VECS(1)] = {1, GEN11_VECS(1)},
+	[CCS] = {0, GEN12_CCS0},
 };
 
 static int gen8_init_common_ring(struct intel_engine_cs *engine)
