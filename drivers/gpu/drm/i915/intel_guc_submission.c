@@ -751,6 +751,9 @@ static void guc_add_request(struct intel_guc *guc, struct i915_request *rq)
 								 engine));
 	u32 ring_tail = intel_ring_set_tail(rq->ring, rq->tail);
 
+	if (context_descriptor_priority_update(rq, &ce->lrc_desc))
+		if (engine->i915->guc.ctx_update_hook)
+			engine->i915->guc.ctx_update_hook(rq->ctx, engine);
 
 	spin_lock(&client->wq_lock);
 
