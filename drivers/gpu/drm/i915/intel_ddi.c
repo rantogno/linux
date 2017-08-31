@@ -2639,7 +2639,8 @@ void icl_map_plls_to_ports(struct drm_crtc *crtc,
 		mutex_lock(&dev_priv->dpll_lock);
 
 		val = I915_READ(DPCLKA_CFGCR0_ICL);
-		WARN_ON((val & DPCLKA_CFGCR0_DDI_CLK_OFF(port)) == 0);
+		WARN_ON((val & DPCLKA_CFGCR0_DDI_CLK_OFF(port)) == 0 &&
+			!dev_priv->is_simulator);
 
 		if (intel_is_port_combophy(dev_priv, port)) {
 			val &= ~DPCLKA_CFGCR0_DDI_CLK_SEL_MASK(port);
