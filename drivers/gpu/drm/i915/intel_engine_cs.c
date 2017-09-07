@@ -1418,6 +1418,11 @@ static int kbl_init_workarounds(struct intel_engine_cs *engine)
 	if (ret)
 		return ret;
 
+	/* WaAllowUMDToModifyHalfSliceChicken2:icl */
+	ret = wa_ring_whitelist_reg(engine, HALF_SLICE_CHICKEN2);
+	if (ret)
+		return ret;
+
 	return 0;
 }
 
