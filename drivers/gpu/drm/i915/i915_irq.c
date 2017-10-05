@@ -247,9 +247,9 @@ static u32
 gen11_gt_engine_intr(struct drm_i915_private * const i915,
 		     const unsigned int bank, const unsigned int bit);
 
-static bool gen11_reset_one_iir(struct drm_i915_private *dev_priv,
-				  unsigned int bank,
-				  unsigned int bit)
+bool gen11_reset_one_iir(struct drm_i915_private *dev_priv,
+			   unsigned int bank,
+			   unsigned int bit)
 {
 	u32 dw;
 
