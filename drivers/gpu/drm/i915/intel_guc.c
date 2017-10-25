@@ -240,6 +240,8 @@ static u32 get_core_family(struct drm_i915_private *dev_priv)
 		return GUC_CORE_FAMILY_GEN9;
 	case 11:
 		return GUC_CORE_FAMILY_GEN11;
+	case 12:
+		return GUC_CORE_FAMILY_GEN12;
 	default:
 		MISSING_CASE(gen);
 		return GUC_CORE_FAMILY_UNKNOWN;
