@@ -83,6 +83,11 @@ struct intel_guc {
 	/* Cyclic counter mod pagesize	*/
 	u32 db_cacheline;
 
+	/* distributted doorbell information */
+	u8 last_sqidi_num_used;
+	u8 num_sqidi_supported;
+	u16 num_of_doorbells_per_sqidi;
+
 	/* GuC's FW specific registers used in MMIO send */
 	struct {
 		u32 base;
