@@ -951,6 +951,7 @@ i915_error_object_create(struct drm_i915_private *i915,
 
 	dst->gtt_offset = vma->node.start;
 	dst->gtt_size = vma->node.size;
+	dst->tiling = i915_gem_object_get_tiling(vma->obj);
 	dst->page_count = 0;
 	dst->unused = 0;
 
@@ -1280,16 +1281,21 @@ static void error_record_engine_registers(struct i915_gpu_state *error,
 static void record_request(struct i915_request *request,
 			   struct drm_i915_error_request *erq)
 {
-	erq->context = request->ctx->hw_id;
+	struct i915_gem_context *ctx = request->ctx;
+	struct intel_engine_cs *engine = request->engine;
+	struct intel_context *ce = &ctx->engine[engine->id];
+
+	erq->context = ctx->hw_id;
+	erq->lrc_desc = ce->lrc_desc;
 	erq->priority = request->priotree.priority;
-	erq->ban_score = atomic_read(&request->ctx->ban_score);
+	erq->ban_score = atomic_read(&ctx->ban_score);
 	erq->seqno = request->global_seqno;
 	erq->jiffies = request->emitted_jiffies;
 	erq->head = request->head;
 	erq->tail = request->tail;
 
 	rcu_read_lock();
-	erq->pid = request->ctx->pid ? pid_nr(request->ctx->pid) : 0;
+	erq->pid = ctx->pid ? pid_nr(ctx->pid) : 0;
 	rcu_read_unlock();
 }
 
@@ -1467,10 +1473,10 @@ static void gem_record_rings(struct i915_gpu_state *error)
 			ee->batchbuffer =
 				i915_error_object_create(i915, request->batch);
 
-			if (HAS_BROKEN_CS_TLB(i915))
-				ee->wa_batchbuffer =
-					i915_error_object_create(i915,
-								 engine->scratch);
+			ee->wa_batchbuffer =
+				i915_error_object_create(i915,
+							 engine->scratch);
+
 			request_record_user_bo(request, ee);
 
 			ee->ctx =
@@ -1657,10 +1663,8 @@ static void capture_reg_state(struct i915_gpu_state *error)
 		error->ccid = I915_READ(CCID);
 
 	/* 3: Feature specific registers */
-	if (IS_GEN6(dev_priv) || IS_GEN7(dev_priv)) {
-		error->gam_ecochk = I915_READ(GAM_ECOCHK);
+	if (IS_GEN6(dev_priv) || IS_GEN7(dev_priv))
 		error->gac_eco = I915_READ(GAC_ECO_BITS);
-	}
 
 	/* 4: Everything else */
 	if (INTEL_GEN(dev_priv) >= 8) {
@@ -1679,6 +1683,7 @@ static void capture_reg_state(struct i915_gpu_state *error)
 	}
 	error->eir = I915_READ(EIR);
 	error->pgtbl_er = I915_READ(PGTBL_ER);
+	error->gam_ecochk = I915_READ(GAM_ECOCHK);
 }
 
 static void i915_error_capture_msg(struct drm_i915_private *dev_priv,
