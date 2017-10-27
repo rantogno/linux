@@ -31,6 +31,7 @@
 #include <linux/sched/mm.h>
 #include "intel_drv.h"
 #include "intel_guc_submission.h"
+#include "i915_aubcrash.h"
 
 static inline struct drm_i915_private *node_to_i915(struct drm_info_node *node)
 {
@@ -946,7 +947,7 @@ static int i915_gem_fence_regs_info(struct seq_file *m, void *data)
 
 #if IS_ENABLED(CONFIG_DRM_I915_CAPTURE_ERROR)
 static ssize_t gpu_state_read(struct file *file, char __user *ubuf,
-			      size_t count, loff_t *pos)
+			      size_t count, loff_t *pos, bool type_aub)
 {
 	struct i915_gpu_state *error = file->private_data;
 	struct drm_i915_error_state_buf str;
@@ -960,7 +961,10 @@ static ssize_t gpu_state_read(struct file *file, char __user *ubuf,
 	if (ret)
 		return ret;
 
-	ret = i915_error_state_to_str(&str, error);
+	if (type_aub)
+		ret = i915_error_state_to_aub(&str, error);
+	else
+		ret = i915_error_state_to_str(&str, error);
 	if (ret)
 		goto out;
 
@@ -973,6 +977,12 @@ static ssize_t gpu_state_read(struct file *file, char __user *ubuf,
 out:
 	i915_error_state_buf_release(&str);
 	return ret;
+}
+
+static ssize_t gpu_state_read_str(struct file *file, char __user *ubuf,
+				  size_t count, loff_t *pos)
+{
+	return gpu_state_read(file, ubuf, count, pos, false);
 }
 
 static int gpu_state_release(struct inode *inode, struct file *file)
@@ -999,7 +1009,7 @@ static int i915_gpu_info_open(struct inode *inode, struct file *file)
 static const struct file_operations i915_gpu_info_fops = {
 	.owner = THIS_MODULE,
 	.open = i915_gpu_info_open,
-	.read = gpu_state_read,
+	.read = gpu_state_read_str,
 	.llseek = default_llseek,
 	.release = gpu_state_release,
 };
@@ -1030,11 +1040,38 @@ static int i915_error_state_open(struct inode *inode, struct file *file)
 static const struct file_operations i915_error_state_fops = {
 	.owner = THIS_MODULE,
 	.open = i915_error_state_open,
-	.read = gpu_state_read,
+	.read = gpu_state_read_str,
 	.write = i915_error_state_write,
 	.llseek = default_llseek,
 	.release = gpu_state_release,
 };
+#endif
+
+#if IS_ENABLED(CONFIG_DRM_I915_AUB_CRASH_DUMP)
+
+static ssize_t gpu_state_read_aub(struct file *file, char __user *ubuf,
+				  size_t count, loff_t *pos)
+{
+	return gpu_state_read(file, ubuf, count, pos, true);
+}
+
+static const struct file_operations i915_gpu_info_aub_fops = {
+	.owner = THIS_MODULE,
+	.open = i915_gpu_info_open,
+	.read = gpu_state_read_aub,
+	.llseek = default_llseek,
+	.release = gpu_state_release,
+};
+
+static const struct file_operations i915_error_state_aub_fops = {
+	.owner = THIS_MODULE,
+	.open = i915_error_state_open,
+	.read = gpu_state_read_aub,
+	.write = i915_error_state_write,
+	.llseek = default_llseek,
+	.release = gpu_state_release,
+};
+
 #endif
 
 static int
@@ -4930,6 +4967,10 @@ static const struct i915_debugfs_files {
 #if IS_ENABLED(CONFIG_DRM_I915_CAPTURE_ERROR)
 	{"i915_error_state", &i915_error_state_fops},
 	{"i915_gpu_info", &i915_gpu_info_fops},
+#endif
+#if IS_ENABLED(CONFIG_DRM_I915_AUB_CRASH_DUMP)
+	{"i915_error_state_aub", &i915_error_state_aub_fops},
+	{"i915_gpu_info_aub", &i915_gpu_info_aub_fops},
 #endif
 	{"i915_next_seqno", &i915_next_seqno_fops},
 	{"i915_display_crc_ctl", &i915_display_crc_ctl_fops},
