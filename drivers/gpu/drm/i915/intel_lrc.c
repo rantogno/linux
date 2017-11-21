@@ -156,6 +156,15 @@
 
 #define GEN8_CTX_STATUS_COMPLETED_MASK \
 	 (GEN8_CTX_STATUS_COMPLETE | GEN8_CTX_STATUS_PREEMPTED)
+#define GEN12_CTX_SWITCH_DETAIL(status)	((status >> 32) & 0xF)
+#define  GEN12_CTX_COMPLETE		(0x0)
+#define  GEN12_CTX_PREEMPTED		(0x5)
+#define GEN12_SW_CTX_ID_TO(status)	((status >> 15) & 0x7FF)
+#define GEN12_SW_COUNTER_TO(status)	((status >> 26) & 0x3F)
+#define GEN12_SW_CTX_ID_AWAY(status)	((status >> 47) & 0x7FF)
+#define GEN12_SW_COUNTER_AWAY(status)	((status >> 58) & 0x3F)
+#define GEN12_CTX_INVALID		0x7FF
+
 
 /* Typical size of the average request (2 pipecontrols and a MI_BB) */
 #define EXECLISTS_REQUEST_SIZE 64 /* bytes */
@@ -611,7 +620,9 @@ static void execlists_dequeue(struct intel_engine_cs *engine)
 		if (!execlists_is_active(execlists, EXECLISTS_ACTIVE_HWACK))
 			goto unlock;
 
-		if (need_preempt(engine, last, execlists->queue_priority)) {
+		/* FIXME: execlists preempt support for gen12 not implemented yet */
+		if (INTEL_GEN(engine->i915) < 12 &&
+		    need_preempt(engine, last, execlists->queue_priority)) {
 			inject_preempt_context(engine);
 			goto unlock;
 		}
@@ -840,6 +851,186 @@ static void execlists_cancel_requests(struct intel_engine_cs *engine)
 }
 
 /*
+ * Starting with Gen12, the status has a new format:
+ *
+ * bit  0:     switched to new queue
+ * bit  1:     reserved
+ * bits 3-5:   engine class
+ * bits 6-11:  engine instance
+ * bits 12-14: reserved
+ * bits 15-25: sw context id of the lrc we're switching to
+ * bits 26-31: sw counter of the lrc we're switching to
+ * bits 32-35: context switch detail
+ *              - 0: ctx complete
+ *              - 1: wait on sync flip
+ *              - 2: wait on vblank
+ *              - 3: wait on scanline
+ *              - 4: wait on semaphore
+ *              - 5: context preempted (not on SEMAPHORE_WAIT or WAIT_FOR_EVENT)
+ * bit  36:    reserved
+ * bits 37-43: wait detail (for switch detail 1 to 4)
+ * bits 44-46: reserved
+ * bits 47-57: sw context id of the lrc we're switching away from
+ * bits 58-63: sw counter of the lrc we're switching away from
+ *
+ * Some events now need to be inferred based on the values of some of the
+ * fields:
+ *
+ * Idle->Active: ctx_away invalid (0x7FF) && ctx_to valid && new_queue
+ * Active->Idle: ctx_away valid && ctx_to invalid (0x7FF) && !new_queue
+ * lite restore: ctx_away == ctx_to && new_queue
+ *
+ * FIXME: in the code below the new_queue field is not used because that is
+ * mainly needed to distinguish some preemption scenarios, which we currently
+ * do not support in execlist mode (e.g. Preempt to Idle has the same ctx away
+ * and ctx to as active to idle, but new_queue is set)
+ */
+static inline bool gen12_process_csb(struct intel_engine_execlists *execlists,
+				     u64 status)
+{
+	u32 ctx_away, ctx_to;
+
+	ctx_away = GEN12_SW_CTX_ID_AWAY(status);
+	ctx_to = GEN12_SW_CTX_ID_TO(status);
+
+	if (ctx_away == ctx_to) {
+		GEM_BUG_ON(ctx_to == GEN12_CTX_INVALID);
+		return true;
+	} else if (ctx_away == GEN12_CTX_INVALID) {
+		/* idle to active */
+		execlists_set_active(execlists,
+				     EXECLISTS_ACTIVE_HWACK);
+		return false;
+	} else if (ctx_to == GEN12_CTX_INVALID) {
+		/* active to idle */
+		execlists_clear_active(execlists,
+				       EXECLISTS_ACTIVE_HWACK);
+		/* carry on */
+	}
+
+	GEM_BUG_ON(GEN12_CTX_SWITCH_DETAIL(status) != GEN12_CTX_COMPLETE);
+
+	return true;
+}
+
+static inline bool gen8_process_csb(struct intel_engine_execlists *execlists,
+				     u64 status)
+{
+
+	if (status & (GEN8_CTX_STATUS_IDLE_ACTIVE |
+		      GEN8_CTX_STATUS_PREEMPTED))
+		execlists_set_active(execlists,
+				     EXECLISTS_ACTIVE_HWACK);
+	if (status & GEN8_CTX_STATUS_ACTIVE_IDLE)
+		execlists_clear_active(execlists,
+				       EXECLISTS_ACTIVE_HWACK);
+
+	if (!(status & GEN8_CTX_STATUS_COMPLETED_MASK))
+		return false;
+
+	/* We should never get a COMPLETED | IDLE_ACTIVE! */
+	GEM_BUG_ON(status & GEN8_CTX_STATUS_IDLE_ACTIVE);
+
+	if (status & GEN8_CTX_STATUS_COMPLETE &&
+	    upper_32_bits(status) == execlists->preempt_complete_status) {
+		execlists_cancel_port_requests(execlists);
+		execlists_unwind_incomplete_requests(execlists);
+
+		GEM_BUG_ON(!execlists_is_active(execlists,
+						EXECLISTS_ACTIVE_PREEMPT));
+		execlists_clear_active(execlists,
+				       EXECLISTS_ACTIVE_PREEMPT);
+		return false;
+	}
+
+	if (status & GEN8_CTX_STATUS_PREEMPTED &&
+	    execlists_is_active(execlists,
+				EXECLISTS_ACTIVE_PREEMPT))
+		return false;
+
+	return true;
+}
+
+#ifdef CONFIG_DRM_I915_DEBUG_GEM
+static inline void assert_csb_ctx_id_match(struct drm_i915_private *dev_priv,
+					   struct execlist_port *port,
+					   u64 status)
+{
+	u32 context_id = port->context_id;
+
+	if (INTEL_GEN(dev_priv) >= 12) {
+		unsigned int sw_ctx_id, sw_counter;
+
+		sw_ctx_id = (context_id >> (GEN11_SW_CTX_ID_SHIFT - 32)) &
+			GENMASK(GEN11_SW_CTX_ID_WIDTH - 1, 0);
+		sw_counter = (context_id >> (GEN11_SW_COUNTER_SHIFT - 32)) &
+			GENMASK(GEN11_SW_COUNTER_WIDTH - 1, 0);
+
+		BUG_ON(sw_ctx_id != GEN12_SW_CTX_ID_AWAY(status));
+		BUG_ON(sw_counter != GEN12_SW_COUNTER_AWAY(status));
+	} else {
+		BUG_ON((status >> 32) != context_id);
+	}
+}
+
+static inline void assert_no_csb_preempt(struct drm_i915_private *dev_priv,
+					 u64 status)
+{
+	if (INTEL_GEN(dev_priv) >= 12)
+		BUG_ON(GEN12_CTX_SWITCH_DETAIL(status) == GEN12_CTX_PREEMPTED);
+	else
+		BUG_ON(status & GEN8_CTX_STATUS_PREEMPTED);
+}
+
+static inline
+void assert_port1_csb_was_element_switch(struct drm_i915_private *dev_priv,
+					 struct execlist_port *port,
+					 u64 status)
+{
+	if (INTEL_GEN(dev_priv) >= 12) {
+		u32 ctx_away, ctx_to;
+		bool element_switch;
+		bool new_queue = status & 0x1;
+
+		ctx_away = GEN12_SW_CTX_ID_AWAY(status);
+		ctx_to = GEN12_SW_CTX_ID_TO(status);
+		element_switch = (ctx_away != ctx_to) && !new_queue;
+		BUG_ON(port_isset(&port[1]) && !element_switch);
+	} else {
+		BUG_ON(port_isset(&port[1]) &&
+		       !(status & GEN8_CTX_STATUS_ELEMENT_SWITCH));
+	}
+}
+
+static inline void assert_idle(struct drm_i915_private *dev_priv, u64 status)
+{
+	if (INTEL_GEN(dev_priv) >= 12)
+		BUG_ON(GEN12_SW_CTX_ID_TO(status) != GEN12_CTX_INVALID);
+	else
+		BUG_ON(!(status & GEN8_CTX_STATUS_ACTIVE_IDLE));
+}
+#else
+static inline void assert_csb_ctx_id_match(struct drm_i915_private *dev_priv,
+					   struct execlist_port *port,
+					   u64 status)
+{
+}
+static inline void assert_no_csb_preempt(struct drm_i915_private *dev_priv,
+					 u64 status)
+{
+}
+static inline
+void assert_port1_csb_was_element_switch(struct drm_i915_private *dev_priv,
+					 struct execlist_port *port,
+					 u64 status)
+{
+}
+static inline void assert_idle(struct drm_i915_private *dev_priv, u64 status)
+{
+}
+#endif
+
+/*
  * Check the unread Context Status Buffers and manage the submission of new
  * contexts to the ELSP accordingly.
  */
@@ -913,7 +1104,8 @@ static void execlists_submission_tasklet(unsigned long data)
 
 		while (head != tail) {
 			struct i915_request *rq;
-			unsigned int status;
+			u64 status;
+			bool need_port_update;
 			unsigned int count;
 
 			if (++head == GEN8_CSB_ENTRIES)
@@ -937,42 +1129,19 @@ static void execlists_submission_tasklet(unsigned long data)
 			 */
 
 			status = READ_ONCE(buf[2 * head]); /* maybe mmio! */
+			status |= (u64)READ_ONCE(buf[2 * head + 1]) << 32;
+
 			GEM_TRACE("%s csb[%d]: status=0x%08x:0x%08x, active=0x%x\n",
 				  engine->name, head,
-				  status, buf[2*head + 1],
+				  lower_32_bits(status), upper_32_bits(status),
 				  execlists->active);
 
-			if (status & (GEN8_CTX_STATUS_IDLE_ACTIVE |
-				      GEN8_CTX_STATUS_PREEMPTED))
-				execlists_set_active(execlists,
-						     EXECLISTS_ACTIVE_HWACK);
-			if (status & GEN8_CTX_STATUS_ACTIVE_IDLE)
-				execlists_clear_active(execlists,
-						       EXECLISTS_ACTIVE_HWACK);
+			if (INTEL_GEN(dev_priv) >= 12)
+				need_port_update = gen12_process_csb(execlists, status);
+			else
+				need_port_update = gen8_process_csb(execlists, status);
 
-			if (!(status & GEN8_CTX_STATUS_COMPLETED_MASK))
-				continue;
-
-			/* We should never get a COMPLETED | IDLE_ACTIVE! */
-			GEM_BUG_ON(status & GEN8_CTX_STATUS_IDLE_ACTIVE);
-
-			if (status & GEN8_CTX_STATUS_COMPLETE &&
-			    buf[2*head + 1] == execlists->preempt_complete_status) {
-				GEM_TRACE("%s preempt-idle\n", engine->name);
-
-				execlists_cancel_port_requests(execlists);
-				execlists_unwind_incomplete_requests(execlists);
-
-				GEM_BUG_ON(!execlists_is_active(execlists,
-								EXECLISTS_ACTIVE_PREEMPT));
-				execlists_clear_active(execlists,
-						       EXECLISTS_ACTIVE_PREEMPT);
-				continue;
-			}
-
-			if (status & GEN8_CTX_STATUS_PREEMPTED &&
-			    execlists_is_active(execlists,
-						EXECLISTS_ACTIVE_PREEMPT))
+			if (!need_port_update)
 				continue;
 
 			GEM_BUG_ON(!execlists_is_active(execlists,
@@ -985,14 +1154,14 @@ static void execlists_submission_tasklet(unsigned long data)
 				  rq ? rq->global_seqno : 0,
 				  rq ? rq_prio(rq) : 0);
 
-			/* Check the context/desc id for this event matches */
-			GEM_DEBUG_BUG_ON(buf[2 * head + 1] != port->context_id);
+			assert_csb_ctx_id_match(dev_priv, port, status);
 
 			GEM_BUG_ON(count == 0);
 			if (--count == 0) {
-				GEM_BUG_ON(status & GEN8_CTX_STATUS_PREEMPTED);
-				GEM_BUG_ON(port_isset(&port[1]) &&
-					   !(status & GEN8_CTX_STATUS_ELEMENT_SWITCH));
+				assert_no_csb_preempt(dev_priv, status);
+				assert_port1_csb_was_element_switch(dev_priv,
+								    port,
+								    status);
 				GEM_BUG_ON(!i915_request_completed(rq));
 				execlists_context_schedule_out(rq);
 				trace_i915_request_out(rq);
@@ -1006,12 +1175,12 @@ static void execlists_submission_tasklet(unsigned long data)
 				port_set(port, port_pack(rq, count));
 			}
 
-			/* After the final element, the hw should be idle */
-			GEM_BUG_ON(port_count(port) == 0 &&
-				   !(status & GEN8_CTX_STATUS_ACTIVE_IDLE));
-			if (port_count(port) == 0)
+			if (port_count(port) == 0) {
+				/* After the final element, the hw should be idle */
+				assert_idle(dev_priv, status);
 				execlists_clear_active(execlists,
 						       EXECLISTS_ACTIVE_USER);
+			}
 		}
 
 		if (head != execlists->csb_head) {
