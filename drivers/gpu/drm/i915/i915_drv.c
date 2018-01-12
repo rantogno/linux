@@ -384,7 +384,11 @@ static int i915_getparam_ioctl(struct drm_device *dev, void *data,
 		break;
 	case I915_PARAM_HUC_STATUS:
 		intel_runtime_pm_get(dev_priv);
-		value = I915_READ(HUC_STATUS2) & HUC_FW_VERIFIED;
+		if (INTEL_GEN(dev_priv) >= 11)
+			value = I915_READ(HUC_KERNEL_LOAD_INFO) &
+				HUC_LOAD_SUCCESSFUL;
+		else
+			value = I915_READ(HUC_STATUS2) & HUC_FW_VERIFIED;
 		intel_runtime_pm_put(dev_priv);
 		break;
 	case I915_PARAM_MMAP_GTT_VERSION:
