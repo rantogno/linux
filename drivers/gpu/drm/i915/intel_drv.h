@@ -1917,6 +1917,8 @@ void intel_power_domains_fini(struct drm_i915_private *);
 void intel_power_domains_init_hw(struct drm_i915_private *dev_priv, bool resume);
 void intel_power_domains_suspend(struct drm_i915_private *dev_priv);
 void intel_power_domains_verify_state(struct drm_i915_private *dev_priv);
+void icl_display_core_init(struct drm_i915_private *dev_priv, bool resume);
+void icl_display_core_uninit(struct drm_i915_private *dev_priv);
 void bxt_display_core_init(struct drm_i915_private *dev_priv, bool resume);
 void bxt_display_core_uninit(struct drm_i915_private *dev_priv);
 void intel_runtime_pm_enable(struct drm_i915_private *dev_priv);
