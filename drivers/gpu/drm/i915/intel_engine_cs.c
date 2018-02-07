@@ -1525,6 +1525,20 @@ static int icl_init_workarounds(struct intel_engine_cs *engine)
 	return 0;
 }
 
+static int tgl_init_workarounds(struct intel_engine_cs *engine)
+{
+	struct drm_i915_private *dev_priv = engine->i915;
+	u32 val;
+
+	/* Wa_1604555607:tgl */
+	val = I915_READ(FF_MODE2);
+	val &= ~FF_MODE2_TDS_TIMER_MASK;
+	val |= FF_MODE2_TDS_TIMER_128;
+	I915_WRITE(FF_MODE2, val);
+
+	return 0;
+}
+
 int init_workarounds_ring(struct intel_engine_cs *engine)
 {
 	struct drm_i915_private *dev_priv = engine->i915;
@@ -1554,6 +1568,8 @@ int init_workarounds_ring(struct intel_engine_cs *engine)
 		err = cnl_init_workarounds(engine);
 	else if (IS_ICELAKE(dev_priv))
 		err = icl_init_workarounds(engine);
+	else if (IS_TIGERLAKE(dev_priv))
+		err = tgl_init_workarounds(engine);
 	else
 		err = 0;
 	if (err)
