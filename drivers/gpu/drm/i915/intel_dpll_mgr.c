@@ -2603,6 +2603,14 @@ enum intel_dpll_id icl_port_to_mg_pll_id(enum port port)
 	return port - PORT_C + DPLL_ID_ICL_MGPLL1;
 }
 
+static enum intel_dpll_id icl_get_max_dpll(struct drm_i915_private *dev_priv)
+{
+	if (IS_ICL_11_5(dev_priv))
+		return DPLL_ID_ICL_11_5_DPLL4;
+	else
+		return DPLL_ID_ICL_DPLL1;
+}
+
 bool intel_is_dpll_combophy(enum intel_dpll_id id)
 {
 	return id == DPLL_ID_ICL_DPLL0 || id == DPLL_ID_ICL_DPLL1;
@@ -2846,7 +2854,7 @@ icl_get_dpll(struct intel_crtc *crtc, struct intel_crtc_state *crtc_state,
 
 	if (intel_is_port_combophy(dev_priv, port)) {
 		min = DPLL_ID_ICL_DPLL0;
-		max = DPLL_ID_ICL_DPLL1;
+		max = icl_get_max_dpll(dev_priv);
 		ret = icl_calc_dpll_state(encoder, clock, &pll_hw_state);
 	} else if (intel_is_port_tc(dev_priv, port)) {
 		if (0 /* TODO: TBT PLLs */) {
