@@ -1555,7 +1555,7 @@ static void gem_capture_vm(struct i915_gpu_state *error,
 	else
 		count = 0;
 
-	if (INTEL_GEN(dev_priv) >= 8)
+	if (error && INTEL_GEN(error->i915) >= 8)
 		i915_error_record_ppgtt(error, vm, idx);
 
 	error->active_vm[idx] = vm;
