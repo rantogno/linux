@@ -581,6 +581,7 @@ static void tgl_ctx_workarounds_init(struct intel_engine_cs *engine,
 				     struct i915_wa_list *wal)
 {
 	u32 val;
+	struct drm_i915_private *i915 = engine->i915;
 
 	/* Wa_1409142259:tgl */
 	WA_SET_BIT_MASKED(GEN11_COMMON_SLICE_CHICKEN3,
@@ -598,6 +599,14 @@ static void tgl_ctx_workarounds_init(struct intel_engine_cs *engine,
 	wa_add(wal, FF_MODE2, FF_MODE2_TDS_TIMER_MASK, val,
 	       IS_TGL_REVID(engine->i915, TGL_REVID_A0, TGL_REVID_A0) ? 0 :
 			    FF_MODE2_TDS_TIMER_MASK);
+
+	/* Wa_1409085225:tgl (pre-prod) */
+	/* if (IS_TGL_REVID(i915, TGL_REVID_A0, TGL_REVID_A0)) */
+		WA_SET_BIT_MASKED(GEN9_ROW_CHICKEN4,
+				  GEN12_DISABLE_TDL_PUSH_CONSTANT);
+
+	/* Wa_1606931601:tgl */
+	WA_SET_BIT_MASKED(GEN7_ROW_CHICKEN2, GEN12_DISABLE_EARLY_READ);
 }
 
 static void
