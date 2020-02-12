@@ -15027,6 +15027,10 @@ static int intel_atomic_check(struct drm_device *dev,
 	if (new_cdclk_state && new_cdclk_state->force_min_cdclk_changed)
 		any_ms = true;
 
+	/* Uugly :( */
+	if (dev_priv->wm.distrust_bios_wm)
+		any_ms = true;
+
 	if (any_ms) {
 		ret = intel_modeset_checks(state);
 		if (ret)
