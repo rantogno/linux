@@ -596,9 +596,7 @@ static void tgl_ctx_workarounds_init(struct intel_engine_cs *engine,
 	 * enable verification of WA from the later steppings, which enables
 	 * the read of FF_MODE2.
 	 */
-	wa_add(wal, FF_MODE2, FF_MODE2_TDS_TIMER_MASK, val,
-	       IS_TGL_REVID(engine->i915, TGL_REVID_A0, TGL_REVID_A0) ? 0 :
-			    FF_MODE2_TDS_TIMER_MASK);
+	wa_add(wal, FF_MODE2, FF_MODE2_TDS_TIMER_MASK, val, FF_MODE2_TDS_TIMER_MASK);
 
 	/* Wa_1409085225:tgl (pre-prod) */
 	/* if (IS_TGL_REVID(i915, TGL_REVID_A0, TGL_REVID_A0)) */
@@ -940,13 +938,13 @@ static void
 tgl_gt_workarounds_init(struct drm_i915_private *i915, struct i915_wa_list *wal)
 {
 	/* Wa_1409420604:tgl */
-	if (IS_TGL_REVID(i915, TGL_REVID_A0, TGL_REVID_A0))
+	/* if (IS_TGL_REVID(i915, TGL_REVID_A0, TGL_REVID_A0)) */
 		wa_write_or(wal,
 			    SUBSLICE_UNIT_LEVEL_CLKGATE2,
 			    CPSSUNIT_CLKGATE_DIS);
 
 	/* Wa_1409180338:tgl */
-	if (IS_TGL_REVID(i915, TGL_REVID_A0, TGL_REVID_A0))
+	/* if (IS_TGL_REVID(i915, TGL_REVID_A0, TGL_REVID_A0)) */
 		wa_write_or(wal,
 			    SLICE_UNIT_LEVEL_CLKGATE,
 			    L3_CLKGATE_DIS | L3_CR2X_CLKGATE_DIS);
@@ -1341,7 +1339,7 @@ rcs_engine_wa_init(struct intel_engine_cs *engine, struct i915_wa_list *wal)
 {
 	struct drm_i915_private *i915 = engine->i915;
 
-	if (IS_TGL_REVID(i915, TGL_REVID_A0, TGL_REVID_A0)) {
+	/* if (IS_TGL_REVID(i915, TGL_REVID_A0, TGL_REVID_A0)) { */
 		/* Wa_1606700617:tgl */
 		wa_masked_en(wal,
 			     GEN9_CS_DEBUG_MODE1,
@@ -1377,7 +1375,7 @@ rcs_engine_wa_init(struct intel_engine_cs *engine, struct i915_wa_list *wal)
 		wa_masked_en(wal,
 			     GEN7_ROW_CHICKEN2,
 			     GEN12_DISABLE_EARLY_READ);
-	}
+	/* } */
 
 	if (IS_GEN(i915, 11)) {
 		/* This is not an Wa. Enable for better image quality */
