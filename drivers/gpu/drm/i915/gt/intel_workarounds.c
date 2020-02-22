@@ -598,6 +598,10 @@ static void tgl_ctx_workarounds_init(struct intel_engine_cs *engine,
 	wa_add(wal, FF_MODE2, FF_MODE2_TDS_TIMER_MASK, val,
 	       IS_TGL_REVID(engine->i915, TGL_REVID_A0, TGL_REVID_A0) ? 0 :
 			    FF_MODE2_TDS_TIMER_MASK);
+
+	/* Wa_1806527549:tgl */
+	WA_SET_BIT_MASKED(HIZ_CHICKEN,
+			  GEN12_HZ_DEPTH_TEST_LE_GE_OPTIMIZATION_DISABLE);
 }
 
 static void
