@@ -591,10 +591,6 @@ static void tgl_ctx_workarounds_init(struct intel_engine_cs *engine,
 	 * the read of FF_MODE2.
 	 */
 	wa_add(wal, FF_MODE2, FF_MODE2_TDS_TIMER_MASK, FF_MODE2_TDS_TIMER_128, 0);
-
-	/* Wa_1806527549:tgl */
-	WA_SET_BIT_MASKED(HIZ_CHICKEN,
-			  GEN12_HZ_DEPTH_TEST_LE_GE_OPTIMIZATION_DISABLE);
 }
 
 static void
@@ -1261,6 +1257,8 @@ static void tgl_whitelist_build(struct intel_engine_cs *engine)
 
 		/* Wa_1808121037:tgl */
 		whitelist_reg(w, GEN7_COMMON_SLICE_CHICKEN1);
+
+		whitelist_reg(w, HIZ_CHICKEN);
 		break;
 	default:
 		break;
