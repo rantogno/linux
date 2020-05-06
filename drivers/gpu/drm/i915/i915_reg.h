@@ -2526,6 +2526,8 @@ static inline bool i915_mmio_reg_valid(i915_reg_t reg)
 #define HSW_GTT_CACHE_EN	_MMIO(0x4024)
 #define   GTT_CACHE_EN_ALL	0xF0007FFF
 #define GEN7_WR_WATERMARK	_MMIO(0x4028)
+#define GEN12_GFX_CCS_AUX_NV	_MMIO(0x4208)
+#define   AUX_INV		REG_BIT(0)
 #define GEN7_GFX_PRIO_CTRL	_MMIO(0x402C)
 #define ARB_MODE		_MMIO(0x4030)
 #define   ARB_MODE_SWIZZLE_SNB	(1 << 4)
