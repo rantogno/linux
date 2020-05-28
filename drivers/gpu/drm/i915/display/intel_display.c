@@ -14799,6 +14799,53 @@ static bool intel_cpu_transcoders_need_modeset(struct intel_atomic_state *state,
 	return false;
 }
 
+static int intel_atomic_check_async(struct intel_atomic_state *state)
+{
+	struct drm_plane *plane;
+	struct drm_plane_state *plane_state;
+	struct intel_crtc_state *old_crtc_state, *new_crtc_state;
+	struct intel_plane_state *new_plane_state, *old_plane_state;
+	struct intel_crtc *crtc;
+	struct intel_plane *intel_plane;
+	int i, j;
+
+	/*FIXME: Async flip is only supported for primary plane currently
+	 * Support for overlays to be added.
+	 */
+	for_each_new_plane_in_state(&state->base, plane, plane_state, j) {
+		if (plane->type != DRM_PLANE_TYPE_PRIMARY) {
+			DRM_DEBUG_KMS("Async flips is NOT supported for non-primary plane\n");
+			return -EINVAL;
+		}
+	}
+
+	for_each_oldnew_intel_crtc_in_state(state, crtc, old_crtc_state,
+					    new_crtc_state, i) {
+		if (old_crtc_state->enable_fbc != new_crtc_state->enable_fbc) {
+			DRM_DEBUG_KMS("FBC status cannot be changed in async flip\n");
+			return -EINVAL;
+		}
+	}
+
+	for_each_oldnew_intel_plane_in_state(state, intel_plane, old_plane_state,
+					     new_plane_state, i) {
+		if ((old_plane_state->color_plane[0].x !=
+		     new_plane_state->color_plane[0].x) ||
+		    (old_plane_state->color_plane[0].y !=
+		     new_plane_state->color_plane[0].y)) {
+			DRM_DEBUG_KMS("Offsets cannot be changed in async\n");
+			return -EINVAL;
+		}
+
+		if (old_plane_state->uapi.fb->modifier !=
+		    new_plane_state->uapi.fb->modifier) {
+			DRM_DEBUG_KMS("Framebuffer modifiers cannot be changed in async flip\n");
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+
 /**
  * intel_atomic_check - validate state object
  * @dev: drm device
@@ -14823,6 +14870,14 @@ static int intel_atomic_check(struct drm_device *dev,
 	ret = drm_atomic_helper_check_modeset(dev, &state->base);
 	if (ret)
 		goto fail;
+
+	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i) {
+		if (new_crtc_state->uapi.async_flip) {
+			ret = intel_atomic_check_async(state);
+			if  (ret)
+				goto fail;
+		}
+	}
 
 	for_each_oldnew_intel_crtc_in_state(state, crtc, old_crtc_state,
 					    new_crtc_state, i) {
